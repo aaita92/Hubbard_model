@@ -13,7 +13,6 @@ from qiskit.visualization import *
 
 from benchmark_code import diagonalization as di
 
-#Aer
 from qiskit.quantum_info import Kraus, SuperOp
 from qiskit.providers.aer import QasmSimulator
 from qiskit.providers.aer.noise import NoiseModel
@@ -21,6 +20,11 @@ from qiskit.providers.aer.noise import QuantumError, ReadoutError
 from qiskit.providers.aer.noise import pauli_error
 from qiskit.providers.aer.noise import depolarizing_error
 from qiskit.providers.aer.noise import thermal_relaxation_error
+
+from cloudant.client import Cloudant
+from cloudant.error import CloudantException
+from cloudant.result import Result, ResultByKey
+import json
 #===========================================================
 
 
@@ -104,10 +108,6 @@ def hubb_buildQuantum(initstate, delta, T, V, nTrot):
     return hubb_fin
 
 
-# Lettura parametri e mitigazione degli errori
-#def hubb_errorMitigate():
-
-
 # Read run parameters and execute circuit on simulator or on real HW
 def hubb_executeQuantum(hubb_fin, delta, delta_range, BK, HW, opt_level, initial_layout, nShots):
 
@@ -175,11 +175,51 @@ def hubb_executeQuantum(hubb_fin, delta, delta_range, BK, HW, opt_level, initial
     results[0] = counts
     results[1] = depth
     results[2] = gates
+    if BK == 3:
+        results[3] = job_hw_id
+        results[4] = backend_properties
+        results[5] = job_hw_date
     return results
 
 
-# Correzione dei risultati con conservazione grandezze fisiche
-#def hubb_correctErrors():
+# Count only feasible states and calculate correction factor
+def hubb_calcMitigateObservables(results, nShots, corr):
+
+    res_df = pd.DataFrame()
+    for i in results[0]: res_df = res_df.append(i,ignore_index=True)
+    res_df = res_df.fillna(0)
+
+    # Shots on feasible and on unfeasible states
+    feas_shots = res_df[['0110', '0101', '1001', '1010']].sum(axis=1)
+    unfeas_shots = res_df[['0000', '0001', '0010', '0011', '0100', '0111', '1000', '1011', '1100', '1101', '1110', '1111']].sum(axis=1)
+
+    # Consolidate shots on feasible and unfeasible states and calculate means
+    counts_df = pd.concat([feas_shots.reset_index(), unfeas_shots.reset_index()], axis=1).drop(columns='index')
+    counts_df.columns = ['feasible', 'unfeasible']
+    counts_df['ratio'] = counts_df.unfeasible/counts_df.feasible
+    counts_df.mean()
+
+    # Correction factor
+    if corr == 1: bound = counts_df.mean()['feasible']/counts_df.mean()['ratio'] # bound = feasible*(feasible/unfeasible)
+    elif corr == 0: bound = nShots
+
+    # Mapping
+    # q3 q2 q1 q0
+    # 1u 2u 2d 1d
+
+    # Observables
+    # (1-Sz)/2
+
+    # Calculate and correct observables
+    res_df["n1_up"] = (1-((res_df['0110']+res_df['0101'])-(res_df['1001']+res_df['1010']))/bound)/2
+    res_df["n1_dn"] = (1-((res_df['0110']+res_df['1010'])-(res_df['1001']+res_df['0101']))/bound)/2
+    res_df["n2_up"] = (1-((res_df['1010']+res_df['1001'])-(res_df['0101']+res_df['0110']))/bound)/2
+    res_df["n2_dn"] = (1-((res_df['1001']+res_df['0101'])-(res_df['0110']+res_df['1010']))/bound)/2
+    # Calculate particle number
+    res_df["n_sum"] = (res_df["n1_up"]+res_df["n2_up"]+res_df["n2_dn"]+res_df["n1_dn"])
+
+    return res_df
+
 
 
 # CLASS: CLASSICAL BENCHMARK ====================================
@@ -263,3 +303,92 @@ def hubb_calcClassicalSpinTrot(initstate, time_range, T, V, nTrot):
 
 # Verifica conservazione grandezze fisiche
 #def hubb_conservationTest():
+
+
+# CLASS: SAVA DATA TO DB =========================================
+def hubb_saveDB(Document, serviceUsername, servicePassword, serviceURL, databaseName):
+
+    # Connect
+    client = Cloudant(serviceUsername, servicePassword, url=serviceURL)
+    client.connect()
+
+    myDatabaseDemo = client[databaseName]
+    if myDatabaseDemo.exists(): print("DB ready.")
+
+    strDocument = json.dumps(Document)
+    jsonDocument = json.loads(strDocument)
+
+    # Save document to Cloudant
+    newDocument = myDatabaseDemo.create_document(jsonDocument)
+
+    # Check
+    if newDocument.exists(): print("Document created.")
+
+
+
+def hubb_retrieveDB(DB_id, serviceUsername, servicePassword, serviceURL, databaseName):
+
+    # Connect
+    client = Cloudant(serviceUsername, servicePassword, url=serviceURL)
+    client.connect()
+
+    myDatabaseDemo = client[databaseName]
+    if myDatabaseDemo.exists(): print("DB ready.")
+
+    # Retrieve from DB is required
+    if DB_id != '':
+
+        run_DB = myDatabaseDemo[DB_id]
+        run_json = json.dumps(run_DB)
+        run = json.loads(run_json)
+
+        # Check and extract data
+
+        data = dict()
+        results = dict()
+
+        if "job_hw_id" in run: results[3] = run['job_hw_id']
+        elif "job_id" in run: results[3] = run['job_id']
+        else: results[3] = ""
+
+        if "job_hw_date" in run: results[5] = run['job_hw_date']
+        elif "job_date" in run: results[5] = run['job_date']
+        else: results[5] = ""
+
+        data[0] = run['T']
+        data[1] = run['V']
+
+        if "backend" in run: data[2] = run['backend']
+        elif "HW" in run: data[2] = run['HW']
+
+        data[3] = run['nTrot']
+        data[4] = run['nShots']
+        data[5] = run['step_c']
+        data[6] = run['step_q']
+        data[7] = run['opt_level']
+
+        if "initial_layout" in run: data[8] = run['initial_layout']
+        else: data[8] = ""
+
+        if "initState" in run: data[9] = run['initState']
+        elif "initstate" in run: data[9] = run['initstate']
+        else: data[9] = ""
+
+        results[1] = run['depth']
+        results[2] = run['gates']
+
+        if "res_exact" in run: data[10] = run['res_exact']
+        else: data[10] = ""
+
+        if "result_spin" in run: data[11] = run['result_spin']
+        elif "res_spin" in run: data[11] = run['res_spin']
+
+        if "result_trot" in run: data[12] = run['result_trot']
+        elif "res_spin_trot" in run: data[12] = run['res_spin_trot']
+
+        results[0] = run['counts']
+        results[4] = run['backend_properties']
+
+        print('Data retrieved from DB.')
+
+        return [results,data]

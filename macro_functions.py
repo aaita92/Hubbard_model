@@ -215,6 +215,7 @@ def hubb_calcMitigateObservables(results, nShots, corr):
     res_df["n1_dn"] = (1-((res_df['0110']+res_df['1010'])-(res_df['1001']+res_df['0101']))/bound)/2
     res_df["n2_up"] = (1-((res_df['1010']+res_df['1001'])-(res_df['0101']+res_df['0110']))/bound)/2
     res_df["n2_dn"] = (1-((res_df['1001']+res_df['0101'])-(res_df['0110']+res_df['1010']))/bound)/2
+
     # Calculate particle number
     res_df["n_sum"] = (res_df["n1_up"]+res_df["n2_up"]+res_df["n2_dn"]+res_df["n1_dn"])
 

@@ -28,8 +28,6 @@ import json
 #===========================================================
 
 
-
-
 # CLASS: QUANTUM CALCULATION ===================================
 # Read initial parameters and build Quantum Hubbard circuit
 def hubb_buildQuantum(initstate, delta, T, V, nTrot):
@@ -56,7 +54,7 @@ def hubb_buildQuantum(initstate, delta, T, V, nTrot):
     t_delta = 0.5;
     v_delta = 0.25;
 
-    hubb.ry(-pi/2,0);
+    hubb.ry(-pi/2,0); # affetta da errori coerenti e incoerenti
     hubb.ry(-pi/2,1);
     hubb.ry(-pi/2,2);
     hubb.ry(-pi/2,3);
@@ -95,6 +93,23 @@ def hubb_buildQuantum(initstate, delta, T, V, nTrot):
     hubb.rz(V*v_delta*2*delta,2);
     hubb.rz(V*v_delta*2*delta,3);
     # End Trotter subcircuits ============
+
+    '''
+    # Ry noisy (pi/2)
+    hubb.u1(eps["X"],0)
+    hubb.u3(-pi/2-eps["Z"],-pi/2,pi/2,0)
+    hubb.u1(-pi/2,0)
+    hubb.u3(pi/2+eps["Z"],-pi/2,pi/2,0)
+    hubb.u1(-eps["X"],0)
+    '''
+    '''
+    # Rx noisy (pi/2)
+    hubb.u1(-eps["Y"],0)
+    hubb.u3(-np.pi/2+eps["Z"],0.0,0.0,0)
+    hubb.u1(pi/2,0)
+    hubb.u3(np.pi/2-eps["Z"],0.0,0.0,0)
+    hubb.u1(eps["Y"],0)
+    '''
 
     # Append trotter subcircuits
     for i in range(nTrot): hubb_fin.append(hubb, [q_fin[0], q_fin[1], q_fin[2], q_fin[3]])
@@ -222,6 +237,9 @@ def hubb_calcMitigateObservables(results, nShots, corr):
     return res_df
 
 
+# Make classical and quantum plots
+#def hubb_makePlots():
+
 
 # CLASS: CLASSICAL BENCHMARK ====================================
 # Calculate classical fermionic Hamiltonian temporal evolution
@@ -297,16 +315,9 @@ def hubb_calcClassicalSpinTrot(initstate, time_range, T, V, nTrot):
     return results
 
 
-# CLASS: READ RESULTS ===========================================
-# Lettura dei risultati e plot (classici e quantistici)
-#def hubb_makePlots():
-
-
-# Verifica conservazione grandezze fisiche
-#def hubb_conservationTest():
-
 
 # CLASS: SAVA DATA TO DB =========================================
+# Save data to DB
 def hubb_saveDB(Document, serviceUsername, servicePassword, serviceURL, databaseName):
 
     # Connect
@@ -326,7 +337,7 @@ def hubb_saveDB(Document, serviceUsername, servicePassword, serviceURL, database
     if newDocument.exists(): print("Document created.")
 
 
-
+# Retrieve data from DB
 def hubb_retrieveDB(DB_id, serviceUsername, servicePassword, serviceURL, databaseName):
 
     # Connect
@@ -343,52 +354,30 @@ def hubb_retrieveDB(DB_id, serviceUsername, servicePassword, serviceURL, databas
         run_json = json.dumps(run_DB)
         run = json.loads(run_json)
 
-        # Check and extract data
-
+        # Extract data
         data = dict()
         results = dict()
 
-        if "job_hw_id" in run: results[3] = run['job_hw_id']
-        elif "job_id" in run: results[3] = run['job_id']
-        else: results[3] = ""
-
-        if "job_hw_date" in run: results[5] = run['job_hw_date']
-        elif "job_date" in run: results[5] = run['job_date']
-        else: results[5] = ""
-
         data[0] = run['T']
         data[1] = run['V']
-
-        if "backend" in run: data[2] = run['backend']
-        elif "HW" in run: data[2] = run['HW']
-
+        data[2] = run['HW']
         data[3] = run['nTrot']
         data[4] = run['nShots']
         data[5] = run['step_c']
         data[6] = run['step_q']
         data[7] = run['opt_level']
-
-        if "initial_layout" in run: data[8] = run['initial_layout']
-        else: data[8] = ""
-
-        if "initState" in run: data[9] = run['initState']
-        elif "initstate" in run: data[9] = run['initstate']
-        else: data[9] = ""
-
-        results[1] = run['depth']
-        results[2] = run['gates']
-
-        if "res_exact" in run: data[10] = run['res_exact']
-        else: data[10] = ""
-
-        if "result_spin" in run: data[11] = run['result_spin']
-        elif "res_spin" in run: data[11] = run['res_spin']
-
-        if "result_trot" in run: data[12] = run['result_trot']
-        elif "res_spin_trot" in run: data[12] = run['res_spin_trot']
+        data[8] = run['initial_layout']
+        data[9] = run['initstate']
+        data[10] = run['res_exact']
+        data[11] = run['res_spin']
+        data[12] = run['res_spin_trot']
 
         results[0] = run['counts']
+        results[1] = run['depth']
+        results[2] = run['gates']
+        results[3] = run['job_id']
         results[4] = run['backend_properties']
+        results[5] = run['job_date']
 
         print('Data retrieved from DB.')
 

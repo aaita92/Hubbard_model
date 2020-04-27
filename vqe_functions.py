@@ -1,3 +1,11 @@
+"""
+  file funct_programmatic.py
+​
+​
+  Michele Grossi <michele.grossi@it.ibm.com>
+  Version 1.0, December 2019
+"""
+
 from qiskit import *
 import numpy as np
 from numpy import linalg

@@ -378,6 +378,63 @@ def hubb_defineNoise(HW, times, p0g1, p1g0, dpol_u1, dpol_u2, dpol_u3, dpol_cx, 
     return [noise_model, coupling_map]
 
 
+
+# Create noise model and coupling map for noisy Aer simulations
+def hubb_defineNoiseModel(HW, times, p0g1, p1g0, err_flags):
+
+    T1s = times[0]
+    T2s = times[1]
+    time_u1 = times[2]
+    time_u2 = times[3]
+    time_u3 = times[4]
+    time_cx = times[5]
+    time_reset = times[6]
+    time_measure = times[7]
+
+    # THERMAL RELAXATION ERROR
+    if err_flags[0] == 1:
+        errors_reset = [thermal_relaxation_error(t1, t2, time_reset) for t1, t2 in zip(T1s, T2s)]
+        errors_measure = [thermal_relaxation_error(t1, t2, time_measure) for t1, t2 in zip(T1s, T2s)]
+        errors_u1 = [thermal_relaxation_error(t1, t2, time_u1) for t1, t2 in zip(T1s, T2s)]
+        errors_u2 = [thermal_relaxation_error(t1, t2, time_u2) for t1, t2 in zip(T1s, T2s)]
+        errors_u3 = [thermal_relaxation_error(t1, t2, time_u3) for t1, t2 in zip(T1s, T2s)]
+        errors_cx = [[thermal_relaxation_error(t1a, t2a, time_cx).expand(thermal_relaxation_error(t1b, t2b, time_cx))
+                      for t1a, t2a in zip(T1s, T2s)]
+                      for t1b, t2b in zip(T1s, T2s)]
+
+    # READOUT ERROR
+    if err_flags[1] == 1:
+        readout = []
+        for r in range(5):
+            readout.append(ReadoutError([[1 - p1g0[r], p1g0[r]], [p0g1[r], 1 - p0g1[r]]]))
+
+    # ADD ERRORS TO NOISE MODEL
+    noise_model = NoiseModel()
+
+    for j in range(5):
+        # Readout is enabled
+        if err_flags[1] == 1:
+            noise_model.add_readout_error(readout[j], [j])
+
+        # Thermal is enabled
+        if err_flags[0] == 1:
+            noise_model.add_quantum_error(errors_reset[j], "reset", [j])
+            noise_model.add_quantum_error(errors_measure[j], "measure", [j])
+            noise_model.add_quantum_error(errors_u1[j], "u1", [j])
+            noise_model.add_quantum_error(errors_u2[j], "u2", [j])
+            noise_model.add_quantum_error(errors_u3[j], "u3", [j])
+            for k in range(5):
+                noise_model.add_quantum_error(errors_cx[j][k], "cx", [j, k])
+
+    print(noise_model)
+
+    # Coupling map
+    device = IBMQ.get_provider().get_backend(HW)
+    coupling_map = device.configuration().coupling_map
+
+    return [noise_model, coupling_map]
+
+
 # Make classical and quantum plots
 #def hubb_makePlots():
 

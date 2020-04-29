@@ -197,7 +197,6 @@ def hubb_mitigateErrors(line, obs, corr):
 
     elif corr == 1:
         bound = feas_shots # only feasible states shots
-        #fact = 1/0.692
         fact = 1
         if obs == 'n1_up': myoutput = (1-(fact*(line['0110']+line['0101'])-(line['1001']+line['1010']))/bound)/2
         elif obs == 'n1_dn': myoutput = (1-((line['0110']+line['1010'])-(line['1001']+line['0101']))/bound)/2
@@ -380,7 +379,8 @@ def hubb_defineNoise(HW, times, p0g1, p1g0, dpol_u1, dpol_u2, dpol_u3, dpol_cx, 
 
 
 # Create noise model and coupling map for noisy Aer simulations
-def hubb_defineNoiseModel(HW, times, p0g1, p1g0, err_flags):
+# Create noise model and coupling map for noisy Aer simulations
+def hubb_customNoise(HW, times, p0g1, p1g0, err_flags):
 
     T1s = times[0]
     T2s = times[1]
@@ -432,7 +432,7 @@ def hubb_defineNoiseModel(HW, times, p0g1, p1g0, err_flags):
     device = IBMQ.get_provider().get_backend(HW)
     coupling_map = device.configuration().coupling_map
 
-    return [noise_model, coupling_map]
+    return noise_model
 
 
 # Make classical and quantum plots
